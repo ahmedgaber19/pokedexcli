@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/ahmedgaber19/pokedexcli/internal/pokecache"
 )
 
 type Config struct {
 	Next     string `json:"next"`
 	Previous string `json:"previous"`
+	cache    *pokecache.PokeCache
 }
 
 type Location struct {
@@ -52,16 +56,30 @@ func commandMap(config *Config) error {
 	if config.Next == "" {
 		return nil
 	}
-	res, err := http.Get(config.Next)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
 	var response Response
-	err = json.NewDecoder(res.Body).Decode(&response)
-	if err != nil {
-		return err
+	cachedValue, found := config.cache.Get(config.Next)
+	if !found {
+		res, err := http.Get(config.Next)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		err = json.NewDecoder(res.Body).Decode(&response)
+		if err != nil {
+			return err
+		}
+		data, err := json.Marshal(response)
+		if err != nil {
+			return err
+		}
+		config.cache.Add(config.Next, data)
+	} else {
+		err := json.Unmarshal(cachedValue, &response)
+		if err != nil {
+			return err
+		}
 	}
+
 	for _, loc := range response.Locations {
 		fmt.Println(loc.Name)
 	}
@@ -73,17 +91,30 @@ func commandMapb(config *Config) error {
 	if config.Previous == "" {
 		return nil
 	}
-	res, err := http.Get(config.Previous)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
 	var response Response
-	err = json.NewDecoder(res.Body).Decode(&response)
-	if err != nil {
-		return err
+	cachedValue, found := config.cache.Get(config.Previous)
+	if !found {
+		res, err := http.Get(config.Previous)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		err = json.NewDecoder(res.Body).Decode(&response)
+		if err != nil {
+			return err
+		}
+		data, err := json.Marshal(response)
+		if err != nil {
+			return err
+		}
+		config.cache.Add(config.Previous, data)
+	} else {
+		err := json.Unmarshal(cachedValue, &response)
+		if err != nil {
+			return err
+		}
 	}
-	fmt.Println()
+
 	for _, loc := range response.Locations {
 		fmt.Println(loc.Name)
 	}
@@ -130,7 +161,9 @@ func main() {
 	config := Config{
 		Next:     "https://pokeapi.co/api/v2/location-area",
 		Previous: "",
+		cache:    pokecache.NewCache(time.Second * 30),
 	}
+
 	for {
 		fmt.Print("Pokedex > ")
 		sc.Scan()
