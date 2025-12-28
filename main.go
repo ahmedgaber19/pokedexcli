@@ -9,11 +9,14 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/ahmedgaber19/pokedexcli/internal/pokecache"
 )
 
 type Config struct {
 	Next     string `json:"next"`
 	Previous string `json:"previous"`
+	cache    *pokecache.Cache
 }
 
 type LocationAreaResult struct {
@@ -52,18 +55,28 @@ func commandHelp(_ *Config) error {
 
 func commandMap(c *Config) error {
 	if c.Next == "" {
-
-		return errors.New("")
+		return errors.New(" No more location areas available.")
 	}
-	res, err := httpCli.Get(c.Next)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
 	var LocationAreaResult LocationAreaResult
-	err = json.NewDecoder(res.Body).Decode(&LocationAreaResult)
-	if err != nil {
-		return nil
+	cachedVal, found := c.cache.Get(c.Next)
+	if !found {
+		res, err := httpCli.Get(c.Next)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		err = json.NewDecoder(res.Body).Decode(&LocationAreaResult)
+		if err != nil {
+			return err
+		}
+		byteVal, err := json.Marshal(LocationAreaResult)
+		if err != nil {
+			return err
+		}
+		c.cache.Add(c.Next, byteVal)
+
+	} else {
+		json.Unmarshal(cachedVal, &LocationAreaResult)
 	}
 	c.Next = LocationAreaResult.Next
 	c.Previous = LocationAreaResult.Previous
@@ -78,15 +91,26 @@ func commandMapb(c *Config) error {
 	if c.Previous == "" {
 		return errors.New("No previous location areas available.")
 	}
-	res, err := httpCli.Get(c.Previous)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
 	var LocationAreaResult LocationAreaResult
-	err = json.NewDecoder(res.Body).Decode(&LocationAreaResult)
-	if err != nil {
-		return nil
+	cachedVal, found := c.cache.Get(c.Previous)
+
+	if !found {
+		res, err := httpCli.Get(c.Previous)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		err = json.NewDecoder(res.Body).Decode(&LocationAreaResult)
+		if err != nil {
+			return err
+		}
+		byteVal, err := json.Marshal(LocationAreaResult)
+		if err != nil {
+			return err
+		}
+		c.cache.Add(c.Previous, byteVal)
+	} else {
+		json.Unmarshal(cachedVal, &LocationAreaResult)
 	}
 	c.Next = LocationAreaResult.Next
 	c.Previous = LocationAreaResult.Previous
@@ -133,9 +157,11 @@ func cleanInput(text string) []string {
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	commandMap := getCommandsMap()
+	pokeCache := pokecache.NewCache(time.Second * 5)
 	c := Config{
-		Next:     "https://pokeapi.co/api/v2/location-area",
+		Next:     "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
 		Previous: "",
+		cache:    pokeCache,
 	}
 	for {
 		fmt.Print("Pokedex > ")
