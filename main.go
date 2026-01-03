@@ -30,20 +30,20 @@ type LocationAreaResult struct {
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(*Config) error
+	callback    func(*Config, []string) error
 }
 
 var httpCli = http.Client{
 	Timeout: time.Second * 30,
 }
 
-func commandExist(_ *Config) error {
+func commandExist(_ *Config, _ []string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
 }
 
-func commandHelp(_ *Config) error {
+func commandHelp(_ *Config, _ []string) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -53,7 +53,7 @@ func commandHelp(_ *Config) error {
 	return nil
 }
 
-func commandMap(c *Config) error {
+func commandMap(c *Config, _ []string) error {
 	if c.Next == "" {
 		return errors.New(" No more location areas available.")
 	}
@@ -87,7 +87,7 @@ func commandMap(c *Config) error {
 
 }
 
-func commandMapb(c *Config) error {
+func commandMapb(c *Config, _ []string) error {
 	if c.Previous == "" {
 		return errors.New("No previous location areas available.")
 	}
@@ -130,7 +130,7 @@ func getCommandsMap() map[string]cliCommand {
 		"help": {
 			name:        "help",
 			description: "Displays available commands",
-			callback:    func(c *Config) error { return commandHelp(c) },
+			callback:    commandHelp,
 		},
 		"map": {
 			name:        "map",
@@ -168,13 +168,16 @@ func main() {
 		scanner.Scan()
 		scannerText := scanner.Text()
 		words := cleanInput(scannerText)
+		if len(words) == 0 {
+			continue
+		}
 		firstWord := words[0]
 		command, ok := commandMap[firstWord]
 		if !ok {
 			fmt.Println("Unknown Command")
 			continue
 		}
-		err := command.callback(&c)
+		err := command.callback(&c, words[1:])
 		if err != nil {
 			fmt.Println("Error executing command:", err)
 		}
