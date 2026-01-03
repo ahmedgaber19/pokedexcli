@@ -143,16 +143,30 @@ func connamdExplore(c *Config, args []string) error {
 	}
 	var exploreRes ExploreAreaResult
 	cityName := args[0]
-	url := fmt.Sprintf(c.exploreUrl+"%v", cityName)
-	res, err := httpCli.Get(url)
-	if err != nil {
-		return err
+	cachedVal, found := c.cache.Get(cityName)
+	if !found {
+		url := fmt.Sprintf(c.exploreUrl+"%v", cityName)
+		res, err := httpCli.Get(url)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		err = json.NewDecoder(res.Body).Decode(&exploreRes)
+		if err != nil {
+			return err
+		}
+		byteVal, err := json.Marshal(exploreRes)
+		if err == nil {
+			c.cache.Add(cityName, byteVal)
+		}
+
+	} else {
+		err := json.Unmarshal(cachedVal, &exploreRes)
+		if err != nil {
+			return err
+		}
 	}
-	defer res.Body.Close()
-	err = json.NewDecoder(res.Body).Decode(&exploreRes)
-	if err != nil {
-		return err
-	}
+
 	if len(exploreRes.PokemonEncounters) == 0 {
 		fmt.Printf("No Pokemon found in %v.\n", cityName)
 		return nil
