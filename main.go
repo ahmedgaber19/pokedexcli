@@ -14,9 +14,10 @@ import (
 )
 
 type Config struct {
-	Next     string `json:"next"`
-	Previous string `json:"previous"`
-	cache    *pokecache.Cache
+	Next       string `json:"next"`
+	Previous   string `json:"previous"`
+	cache      *pokecache.Cache
+	exploreUrl string
 }
 
 type LocationAreaResult struct {
@@ -25,6 +26,22 @@ type LocationAreaResult struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
+}
+
+type ExploreAreaResult struct {
+	Id        int    `json:"id"`
+	Name      string `json:"name"`
+	GameIndex int    `json:"game_index"`
+	Location  struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	} `json:"location"`
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+			Url  string `json:"url"`
+		} `json:"pokemon"`
+	} `json:"pokemon_encounters"`
 }
 
 type cliCommand struct {
@@ -120,6 +137,34 @@ func commandMapb(c *Config, _ []string) error {
 	return nil
 }
 
+func connamdExplore(c *Config, args []string) error {
+	if len(args) <= 0 {
+		return errors.New("Please provide a location area name to explore.")
+	}
+	var exploreRes ExploreAreaResult
+	cityName := args[0]
+	url := fmt.Sprintf(c.exploreUrl+"%v", cityName)
+	res, err := httpCli.Get(url)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	err = json.NewDecoder(res.Body).Decode(&exploreRes)
+	if err != nil {
+		return err
+	}
+	if len(exploreRes.PokemonEncounters) == 0 {
+		fmt.Printf("No Pokemon found in %v.\n", cityName)
+		return nil
+	}
+	fmt.Printf("Exploring %v...\n", cityName)
+	fmt.Println("Found Pokemon:")
+	for _, pokes := range exploreRes.PokemonEncounters {
+		fmt.Printf("- %v\n", pokes.Pokemon.Name)
+	}
+	return nil
+}
+
 func getCommandsMap() map[string]cliCommand {
 	return map[string]cliCommand{
 		"exit": {
@@ -142,6 +187,11 @@ func getCommandsMap() map[string]cliCommand {
 			description: "Displays previous location areas",
 			callback:    commandMapb,
 		},
+		"explore": {
+			name:        "explore",
+			description: "Explore a specific location area",
+			callback:    connamdExplore,
+		},
 	}
 }
 
@@ -159,9 +209,10 @@ func main() {
 	commandMap := getCommandsMap()
 	pokeCache := pokecache.NewCache(time.Second * 5)
 	c := Config{
-		Next:     "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
-		Previous: "",
-		cache:    pokeCache,
+		Next:       "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
+		Previous:   "",
+		cache:      pokeCache,
+		exploreUrl: "https://pokeapi.co/api/v2/location-area/",
 	}
 	for {
 		fmt.Print("Pokedex > ")
