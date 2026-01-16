@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
+
 	"net/http"
 	"os"
 	"strings"
@@ -18,6 +20,8 @@ type Config struct {
 	Previous   string `json:"previous"`
 	cache      *pokecache.Cache
 	exploreUrl string
+	pokemonUrl string
+	pokes      map[string]Pokemon
 }
 
 type LocationAreaResult struct {
@@ -42,6 +46,31 @@ type ExploreAreaResult struct {
 			Url  string `json:"url"`
 		} `json:"pokemon"`
 	} `json:"pokemon_encounters"`
+}
+
+type Pokemon struct {
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	Height         int    `json:"height"`
+	IsDefault      bool   `json:"is_default"`
+	Order          int    `json:"order"`
+	Weight         int    `json:"weight"`
+	BaseExperience int    `json:"base_experience"`
+	Stats          []struct {
+		BaseStats int `json:"base_stat"`
+		Effort    int `json:"effort"`
+		Stat      struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"stat"`
+	} `json:"stats"`
+	Types []struct {
+		Slot int `json:"slot"`
+		Type struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"type"`
+	} `json:"types"`
 }
 
 type cliCommand struct {
@@ -137,7 +166,7 @@ func commandMapb(c *Config, _ []string) error {
 	return nil
 }
 
-func connamdExplore(c *Config, args []string) error {
+func commandExplore(c *Config, args []string) error {
 	if len(args) <= 0 {
 		return errors.New("Please provide a location area name to explore.")
 	}
@@ -179,6 +208,64 @@ func connamdExplore(c *Config, args []string) error {
 	return nil
 }
 
+func commandCatch(c *Config, args []string) error {
+	if len(args) <= 0 {
+		return errors.New("Please provide a Pokemon name to catch.")
+	}
+	pokeName := args[0]
+	_, ok := c.pokes[pokeName]
+	if ok {
+		fmt.Printf("%v was caught!\n", pokeName)
+		return nil
+	}
+	fmt.Printf("Throwing a Pokeball at %v...\n", pokeName)
+	var pokeRes Pokemon
+	pokeUrl := fmt.Sprintf(c.pokemonUrl+"%v", pokeName)
+	res, err := httpCli.Get(pokeUrl)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	err = json.NewDecoder(res.Body).Decode(&pokeRes)
+	if err != nil {
+		return err
+	}
+	prob := rand.Float32()
+	if prob >= 0.5 {
+		c.pokes[pokeName] = pokeRes
+		fmt.Printf("%v was caught!\n", pokeName)
+	} else {
+		fmt.Printf("%v escaped!\n", pokeName)
+	}
+	return nil
+}
+
+func commandInspect(c *Config, args []string) error {
+	if len(args) < 1 {
+		return errors.New("Please provide a Pokemon name to inspect.")
+	}
+	pokeName := args[0]
+	poke, ok := c.pokes[pokeName]
+	if !ok {
+		fmt.Println("you have not caught that pokemon")
+		return nil
+	}
+	fmt.Printf("Name: %s\n", poke.Name)
+	fmt.Printf("Height: %d\n", poke.Height)
+	fmt.Printf("Weight: %d\n", poke.Weight)
+	fmt.Println("Stats:")
+	for _, s := range poke.Stats {
+		fmt.Printf("- %s: %d\n", s.Stat.Name, s.BaseStats)
+	}
+	fmt.Println("Types:")
+	for _, t := range poke.Types {
+		fmt.Printf("- %s\n", t.Type.Name)
+	}
+
+	return nil
+
+}
+
 func getCommandsMap() map[string]cliCommand {
 	return map[string]cliCommand{
 		"exit": {
@@ -204,7 +291,17 @@ func getCommandsMap() map[string]cliCommand {
 		"explore": {
 			name:        "explore",
 			description: "Explore a specific location area",
-			callback:    connamdExplore,
+			callback:    commandExplore,
+		},
+		"catch": {
+			name:        "catch",
+			description: "Catch a specific Pokemon",
+			callback:    commandCatch,
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "Inspect a caught Pokemon",
+			callback:    commandInspect,
 		},
 	}
 }
@@ -227,7 +324,10 @@ func main() {
 		Previous:   "",
 		cache:      pokeCache,
 		exploreUrl: "https://pokeapi.co/api/v2/location-area/",
+		pokemonUrl: "https://pokeapi.co/api/v2/pokemon/",
+		pokes:      map[string]Pokemon{},
 	}
+
 	for {
 		fmt.Print("Pokedex > ")
 		scanner.Scan()
