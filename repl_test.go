@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ahmedgaber19/pokedexcli/repl"
+)
 
 func TestCleanInput(t *testing.T) {
 	cases := []struct {
@@ -11,7 +15,7 @@ func TestCleanInput(t *testing.T) {
 		expected: []string{"hello", "world"},
 	}}
 	for _, c := range cases {
-		actual := cleanInput(c.input)
+		actual := repl.CleanInput(c.input)
 		// Check the length of the actual slice against the expected slice
 		// if they don't match, use t.Errorf to print an error message
 		// and fail the test
